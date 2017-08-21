@@ -705,7 +705,8 @@ function normalizeLink(url) {
     if (!parsed.protocol || RECODE_HOSTNAME_FOR.indexOf(parsed.protocol) >= 0) {
       try {
         parsed.hostname = punycode.toASCII(parsed.hostname);
-      } catch (er) { /**/ }
+      } catch (er) { /**/
+      }
     }
   }
 
@@ -725,7 +726,8 @@ function normalizeLinkText(url) {
     if (!parsed.protocol || RECODE_HOSTNAME_FOR.indexOf(parsed.protocol) >= 0) {
       try {
         parsed.hostname = punycode.toUnicode(parsed.hostname);
-      } catch (er) { /**/ }
+      } catch (er) { /**/
+      }
     }
   }
 
@@ -872,7 +874,7 @@ function MarkdownIt(presetName, options) {
 
   if (!options) {
     if (!utils.isString(presetName)) {
-      options = presetName || {};
+      options    = presetName || {};
       presetName = 'default';
     }
   }
@@ -991,7 +993,9 @@ function MarkdownIt(presetName, options) {
   this.options = {};
   this.configure(presetName);
 
-  if (options) { this.set(options); }
+  if (options) {
+    this.set(options);
+  }
 }
 
 
@@ -1035,13 +1039,19 @@ MarkdownIt.prototype.configure = function (presets) {
 
   if (utils.isString(presets)) {
     presetName = presets;
-    presets = config[presetName];
-    if (!presets) { throw new Error('Wrong `markdown-it` preset "' + presetName + '", check name'); }
+    presets    = config[presetName];
+    if (!presets) {
+      throw new Error('Wrong `markdown-it` preset "' + presetName + '", check name');
+    }
   }
 
-  if (!presets) { throw new Error('Wrong `markdown-it` preset, can\'t be empty'); }
+  if (!presets) {
+    throw new Error('Wrong `markdown-it` preset, can\'t be empty');
+  }
 
-  if (presets.options) { self.set(presets.options); }
+  if (presets.options) {
+    self.set(presets.options);
+  }
 
   if (presets.components) {
     Object.keys(presets.components).forEach(function (name) {
@@ -1077,7 +1087,9 @@ MarkdownIt.prototype.configure = function (presets) {
 MarkdownIt.prototype.enable = function (list, ignoreInvalid) {
   var result = [];
 
-  if (!Array.isArray(list)) { list = [ list ]; }
+  if (!Array.isArray(list)) {
+    list = [ list ];
+  }
 
   [ 'core', 'block', 'inline' ].forEach(function (chain) {
     result = result.concat(this[chain].ruler.enable(list, true));
@@ -1085,7 +1097,9 @@ MarkdownIt.prototype.enable = function (list, ignoreInvalid) {
 
   result = result.concat(this.inline.ruler2.enable(list, true));
 
-  var missed = list.filter(function (name) { return result.indexOf(name) < 0; });
+  var missed = list.filter(function (name) {
+    return result.indexOf(name) < 0;
+  });
 
   if (missed.length && !ignoreInvalid) {
     throw new Error('MarkdownIt. Failed to enable unknown rule(s): ' + missed);
@@ -1105,7 +1119,9 @@ MarkdownIt.prototype.enable = function (list, ignoreInvalid) {
 MarkdownIt.prototype.disable = function (list, ignoreInvalid) {
   var result = [];
 
-  if (!Array.isArray(list)) { list = [ list ]; }
+  if (!Array.isArray(list)) {
+    list = [ list ];
+  }
 
   [ 'core', 'block', 'inline' ].forEach(function (chain) {
     result = result.concat(this[chain].ruler.disable(list, true));
@@ -1113,7 +1129,9 @@ MarkdownIt.prototype.disable = function (list, ignoreInvalid) {
 
   result = result.concat(this.inline.ruler2.disable(list, true));
 
-  var missed = list.filter(function (name) { return result.indexOf(name) < 0; });
+  var missed = list.filter(function (name) {
+    return result.indexOf(name) < 0;
+  });
 
   if (missed.length && !ignoreInvalid) {
     throw new Error('MarkdownIt. Failed to disable unknown rule(s): ' + missed);
@@ -1185,11 +1203,88 @@ MarkdownIt.prototype.parse = function (src, env) {
  * in [[MarkdownIt.parse]].
  **/
 MarkdownIt.prototype.render = function (src, env) {
+  var tokens;
   env = env || {};
-
-  return this.renderer.render(this.parse(src, env), this.options, env);
+  tokens = this.parse(src, env);
+  tokens = { data:tokens };
+  this.trav(tokens, {});
+  return this.renderer.render(tokens.data, this.options, env);
 };
 
+MarkdownIt.prototype.trav = function (tokens, dataobj) {
+  var token,
+      type = '',
+      i,
+      lastToken = 0;
+
+  if (!dataobj.tmpstr) {
+    dataobj.tmpstr = [];
+  }
+
+  for (i = 0; i < tokens.data.length; i++) {
+    token      = tokens.data[i];
+    type       = token.type;
+
+    //inserting the markdowns for blocks
+    if (token.type === 'inline' && dataobj.tmpstr.length !== 0) {
+      token.children = [
+        {
+          type: 'block_markup',
+          tag: 'span',
+          attrs: null,
+          map: null,
+          nesting: 0,
+          level: 0,
+          children: null,
+          content: String(dataobj.tmpstr).replace(/,/g, ''),
+          markup: '',
+          info: '',
+          meta: null,
+          block: false,
+          hidden: false
+        }
+      ].concat(token.children);
+    }
+
+    //inserting paragraphs into empty blocks
+    if (lastToken && lastToken.type === 'blockquote_open' && type === 'blockquote_close' ||
+      lastToken && lastToken.type === 'list_item_open' && type === 'list_item_close'){
+      //console.log('empty!!!');
+      tokens.data = tokens.data.slice(0, i).concat([ {
+        type: 'block_markup',
+        tag: 'span',
+        attrs: null,
+        map: null,
+        nesting: 0,
+        level: 0,
+        children: null,
+        content: String(dataobj.tmpstr).replace(/,/g, ''),
+        markup: '',
+        info: '',
+        meta: null,
+        block: false,
+        hidden: false
+      } ], tokens.data.slice(i, tokens.data.length));
+
+      i -= 1;
+      //lastToken = 0;
+      continue;
+
+    }
+
+    //Updating the stack for markups
+    if (type === 'blockquote_open') dataobj.tmpstr .push('>');
+    else if (type === 'list_item_open') dataobj.tmpstr.push((token.markup));
+    else if (type === 'blockquote_close')   dataobj.tmpstr.pop();
+    else if (type === 'list_item_close') dataobj.tmpstr.pop();
+
+    //recursively call the childrens
+    if (token.children && token.children.length > 0) {
+      this.trav({ data:token.children }, dataobj);
+    }
+    lastToken = token;
+  }
+};
 
 /** internal
  * MarkdownIt.parseInline(src, env) -> Array
@@ -1811,6 +1906,12 @@ default_rules.code_inline = function (tokens, idx, options, env, slf) {
     '<span class="markdown-markup markdown-markup-open markdown-code-inline_close">' + token.markup + '</span>';
 };
 
+default_rules.block_markup = function (tokens, idx) {
+  var token = tokens[idx];
+  console.log(33);
+  return '<span class="markdown-markup markdown-markup-block">' + token.content + '</span>';
+};
+
 default_rules.code_block = function (tokens, idx, options, env, slf) {
   var token = tokens[idx];
   return '<pre' + slf.renderAttrs(token) + '><code>' +
@@ -1837,6 +1938,16 @@ default_rules.fence = function (tokens, idx, options, env, slf) {
 
   if (highlighted.indexOf('<pre') === 0) {
     highlighted = highlighted.replace(/class\=\"/g, 'class="markdown-block ');
+
+    highlighted = highlighted.replace('<code>', '<code>'
+      + '<span class="markdown-markup markdown-markup-open markdown-fence">'
+      + token.markup + '</span>');
+
+    highlighted = highlighted.replace('</code>',
+        '<span class="markdown-markup markdown-markup-open markdown-fence">'
+      + token.markup + '</span>')
+      + '</code>';
+
     return highlighted + '\n';
   }
 
@@ -1858,15 +1969,23 @@ default_rules.fence = function (tokens, idx, options, env, slf) {
       attrs: tmpAttrs
     };
 
-    return '<pre class="markdown-block"><code' + slf.renderAttrs(tmpToken) + '>'
+    return '<pre class="markdown-block">'
+      + '<span class="markdown-markup markdown-markup-open markdown-fence">' + token.markup + '</span>'
+      + '<code' + slf.renderAttrs(tmpToken) + '>'
       + highlighted
-      + '</code></pre>\n';
+      + '</code>' +
+      +'<span class="markdown-markup markdown-markup-open markdown-fence">' + token.markup + '</span>'
+      + '</pre>\n';
   }
 
 
-  return '<pre class="markdown-block"><code' + slf.renderAttrs(token) + '>'
+  return '<pre class="markdown-block">'
+    + '<span class="markdown-markup markdown-markup-open markdown-fence">' + token.markup + '</span>'
+    + '<code' + slf.renderAttrs(token) + '>'
     + highlighted
-    + '</code></pre>\n';
+    + '</code>'
+    + '<span class="markdown-markup markdown-markup-open markdown-fence">' + token.markup + '</span>'
+  + '</pre>\n';
 };
 
 
@@ -1877,11 +1996,11 @@ default_rules.image = function (tokens, idx, options, env, slf) {
   // should be placed on proper position for tests.
   //
   // Replace content with actual value
-
   token.attrs[token.attrIndex('alt')][1] =
     slf.renderInlineAsText(token.children, options, env);
 
-  return slf.renderToken(tokens, idx, options);
+  return '<span class="markdown-markup markdown-markup-open ' + token.type + '">' + (token.markup) + '</span>' +
+          slf.renderToken(tokens, idx, options);
 };
 
 
@@ -1897,6 +2016,9 @@ default_rules.text = function (tokens, idx /*, options, env */) {
   return '<span class="markdown-text">' + escapeHtml(tokens[idx].content) + '</span>';
 };
 
+default_rules.block_markup = function (tokens, idx /*, options, env */) {
+  return '<span class="markdown-markup markdown-block-markup">' + escapeHtml(tokens[idx].content) + '</span>';
+};
 
 default_rules.html_block       = function (tokens, idx /*, options, env */) {
   return tokens[idx].content;
@@ -1907,7 +2029,16 @@ default_rules.html_inline      = function (tokens, idx /*, options, env */) {
 default_rules.escape_backslash = function (/*, options, env */) {
   return '<span class="escapeBackslash markdown-markup">\\</span>';
 };
-
+default_rules.hr = function (tokens, idx, options, env, slf) {
+  var result = '';
+  result += '<div class="markdown-block">';
+  result += '<span class="markdown-markup markdown-markup-hr">' +
+             tokens[idx].markup +
+            '</span>';
+  result += slf.renderToken(tokens, idx, options);
+  result += '</div>\n';
+  return result;
+};
 /**
  * new Renderer()
  *
@@ -1954,7 +2085,7 @@ function Renderer() {
  **/
 Renderer.prototype.renderAttrs = function renderAttrs(token) {
   var i, l, result;
-  if (token.block && token.nesting !== -1) {
+  if (token.block && token.nesting !== -1 && token.type !== 'hr') {
     if (!token.attrs) {
       token.attrs = [];
     }
@@ -2006,6 +2137,7 @@ Renderer.prototype.renderToken = function renderToken(tokens, idx, options) {
   if (!token.block && token.type.search('_open') !== -1) {
     result += '<span class="markdown-markup markdown-markup-open ' + token.type + '">' + (token.markup) + '</span>';
   }
+
   // Add token name, e.g. `<img`
   result += (token.nesting === -1 ? '</' : '<') + token.tag;
 
@@ -3028,7 +3160,7 @@ module.exports = function hr(state, startLine, endLine, silent) {
   token        = state.push('hr', 'hr', 0);
   token.map    = [ startLine, state.line ];
   token.markup = Array(cnt + 1).join(String.fromCharCode(marker));
-
+  token.attrs  = [ [ 'contenteditable', 'false' ] ];
   return true;
 };
 
@@ -3219,7 +3351,10 @@ function skipBulletListMarker(state, startLine) {
 
   if (pos < max) {
     ch = state.src.charCodeAt(pos);
-
+    if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+      //console.log('space in listlala!');
+      return pos;
+    }
     if (!isSpace(ch)) {
       // " -test " - is not a list item
       return -1;
@@ -3270,7 +3405,10 @@ function skipOrderedListMarker(state, startLine) {
 
   if (pos < max) {
     ch = state.src.charCodeAt(pos);
-
+    if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+      //console.log('space in listlala!');
+      return pos;
+    }
     if (!isSpace(ch)) {
       // " 1.test " - is not a list item
       return -1;
@@ -3438,7 +3576,16 @@ module.exports = function list(state, startLine, endLine, silent) {
 
     // Run subparser & write tokens
     token        = state.push('list_item_open', 'li', 1);
-    token.markup = String.fromCharCode(markerCharCode);
+    if (isOrdered)  {
+      var bpt = posAfterMarker - 1;
+      while (bpt > -1 &&
+      (state.src.charCodeAt(bpt) !== 10)){
+        bpt--;
+      }
+      token.markup = state.src.substr(bpt + 1, posAfterMarker - bpt - 1);
+
+      //console.log(token.markup);
+    }    else token.markup = String.fromCharCode(markerCharCode);
     token.map    = itemLines = [ startLine, 0 ];
 
     oldIndent = state.blkIndent;
@@ -3599,6 +3746,7 @@ var isSpace              = require('../common/utils').isSpace;
 
 module.exports = function reference(state, startLine, _endLine, silent) {
   var ch,
+      token,
       destEndPos,
       destEndLineNo,
       endLine,
@@ -3662,7 +3810,10 @@ module.exports = function reference(state, startLine, _endLine, silent) {
     if (terminate) { break; }
   }
 
-  str = state.getLines(startLine, nextLine, state.blkIndent, false).trim();
+  str = state.getLines(startLine, nextLine, state.blkIndent, false).trim()
+    .replace(/( |&nbsp;)/g, ' ')
+    .replace(/(“|”)/g, '"')
+    .replace(/(‘|’)/g, "'");
   max = str.length;
 
   for (pos = 1; pos < max; pos++) {
@@ -3686,13 +3837,17 @@ module.exports = function reference(state, startLine, _endLine, silent) {
 
   // [label]:   destination   'title'
   //         ^^^ skip optional whitespace here
-  for (pos = labelEnd + 2; pos < max; pos++) {
+  for (pos = labelEnd + 2; pos < max;) {
     ch = str.charCodeAt(pos);
     if (ch === 0x0A) {
       lines++;
+      pos++;
     } else if (isSpace(ch)) {
+      pos++;
       /*eslint no-empty:0*/
-    } else {
+    } else if (str.slice(pos, pos + 6) === '&nbsp;'){
+      pos += 6;
+    }    else {
       break;
     }
   }
@@ -3715,12 +3870,16 @@ module.exports = function reference(state, startLine, _endLine, silent) {
   // [label]:   destination   'title'
   //                       ^^^ skipping those spaces
   start = pos;
-  for (; pos < max; pos++) {
+  for (; pos < max;) {
     ch = str.charCodeAt(pos);
     if (ch === 0x0A) {
       lines++;
+      pos++;
     } else if (isSpace(ch)) {
+      pos++;
       /*eslint no-empty:0*/
+    } else if (str.slice(pos, pos + 6) === '&nbsp;'){
+      pos += 6;
     } else {
       break;
     }
@@ -3755,8 +3914,14 @@ module.exports = function reference(state, startLine, _endLine, silent) {
       lines = destEndLineNo;
       while (pos < max) {
         ch = str.charCodeAt(pos);
-        if (!isSpace(ch)) { break; }
-        pos++;
+        if (isSpace(ch)) {
+          pos++;
+        } else if (str.slice(pos, pos + 6) === '&nbsp;'){
+          pos += 6;
+        } else {
+          break;
+        }
+
       }
     }
   }
@@ -3786,6 +3951,18 @@ module.exports = function reference(state, startLine, _endLine, silent) {
   state.parentType = oldParentType;
 
   state.line = startLine + lines + 1;
+
+  token          = state.push('paragraph_open', 'p', 1);
+  token.map      = [ startLine, state.line ];
+  token.attrs = [ [ 'class', 'markdown-paragraph' ] ];
+
+  token          = state.push('inline', '', 0);
+  token.content  = state.getLines(startLine, nextLine, state.blkIndent, false).replace(/( |$nbsp;)/g, '\xa0');
+  token.map      = [ startLine, state.line ];
+  token.children = [];
+
+  token          = state.push('paragraph_close', 'p', -1);
+
   return true;
 };
 
@@ -5236,9 +5413,13 @@ module.exports = function image(state, silent) {
     // [link](  <href>  "title"  )
     //        ^^ skipping these spaces
     pos++;
-    for (; pos < max; pos++) {
+    for (; pos < max;) {
       code = state.src.charCodeAt(pos);
-      if (!isSpace(code) && code !== 0x0A) { break; }
+      if (isSpace(code) || code === 0x0A) { pos++; }      else if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+        pos += 6;
+      } else {
+        break;
+      }
     }
     if (pos >= max) { return false; }
 
@@ -5258,9 +5439,13 @@ module.exports = function image(state, silent) {
     // [link](  <href>  "title"  )
     //                ^^ skipping these spaces
     start = pos;
-    for (; pos < max; pos++) {
+    for (; pos < max;) {
       code = state.src.charCodeAt(pos);
-      if (!isSpace(code) && code !== 0x0A) { break; }
+      if (isSpace(code) || code === 0x0A) { pos++; }      else if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+        pos += 6;
+      } else {
+        break;
+      }
     }
 
     // [link](  <href>  "title"  )
@@ -5272,9 +5457,13 @@ module.exports = function image(state, silent) {
 
       // [link](  <href>  "title"  )
       //                         ^^ skipping these spaces
-      for (; pos < max; pos++) {
+      for (; pos < max;) {
         code = state.src.charCodeAt(pos);
-        if (!isSpace(code) && code !== 0x0A) { break; }
+        if (isSpace(code) || code === 0x0A) { pos++; }        else if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+          pos += 6;
+        } else {
+          break;
+        }
       }
     } else {
       title = '';
@@ -5334,7 +5523,8 @@ module.exports = function image(state, silent) {
     token.attrs    = attrs = [ [ 'src', href ], [ 'alt', '' ] ];
     token.children = tokens;
     token.content  = content;
-
+    token.markup = state.src.slice(labelStart - 2, pos)
+                            .replace(/( |&nbsp;)/g, '\xa0');
     if (title) {
       attrs.push([ 'title', title ]);
     }
@@ -5350,8 +5540,8 @@ module.exports = function image(state, silent) {
 
 'use strict';
 
-var normalizeReference   = require('../common/utils').normalizeReference;
-var isSpace              = require('../common/utils').isSpace;
+var normalizeReference = require('../common/utils').normalizeReference;
+var isSpace            = require('../common/utils').isSpace;
 
 
 module.exports = function link(state, silent) {
@@ -5365,27 +5555,32 @@ module.exports = function link(state, silent) {
       ref,
       title,
       token,
-      href = '',
-      oldPos = state.pos,
-      max = state.posMax,
-      start = state.pos,
+      href           = '',
+      oldPos         = state.pos,
+      max            = state.posMax,
+      start          = state.pos,
       parseReference = true,
-      pbegin = 0;
+      pbegin         = 0,
+      shorcut        = false;
 
-  if (state.src.charCodeAt(state.pos) !== 0x5B/* [ */) { return false; }
+  if (state.src.charCodeAt(state.pos) !== 0x5B/* [ */) {
+    return false;
+  }
 
   labelStart = state.pos + 1;
-  labelEnd = state.md.helpers.parseLinkLabel(state, state.pos, true);
+  labelEnd   = state.md.helpers.parseLinkLabel(state, state.pos, true);
 
   // parser failed to find ']', so it's not a valid link
-  if (labelEnd < 0) { return false; }
+  if (labelEnd < 0) {
+    return false;
+  }
 
   pos = labelEnd + 1;
   if (pos < max && state.src.charCodeAt(pos) === 0x28/* ( */) {
     //
     // Inline link
     //
-    pbegin = pos;
+    pbegin         = pos;
     // might have found a valid shortcut link, disable reference parsing
     parseReference = false;
 
@@ -5396,18 +5591,20 @@ module.exports = function link(state, silent) {
       code = state.src.charCodeAt(pos);
       if (isSpace(code)) {
         pos++;
-      } else if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+      } else if (state.src.slice(pos, pos + 6) === '&nbsp;') {
         pos += 6;
       } else {
         break;
       }
     }
-    if (pos >= max) { return false; }
+    if (pos >= max) {
+      return false;
+    }
 
     // [link](  <href>  "title"  )
     //          ^^^^^^ parsing link destination
     start = pos;
-    res = state.md.helpers.parseLinkDestination(state.src, pos, state.posMax);
+    res   = state.md.helpers.parseLinkDestination(state.src, pos, state.posMax);
     if (res.ok) {
       href = state.md.normalizeLink(res.str);
       if (state.md.validateLink(href)) {
@@ -5424,26 +5621,30 @@ module.exports = function link(state, silent) {
       code = state.src.charCodeAt(pos);
       if (isSpace(code)) {
         pos++;
-      } else if (state.src.slice(pos, pos + 6) === '&nbsp;'){
+      } else if (state.src.slice(pos, pos + 6) === '&nbsp;') {
         pos += 6;
       } else {
         break;
       }
     }
-    if (pos >= max) { return false; }
+    if (pos >= max) {
+      return false;
+    }
 
     // [link](  <href>  "title"  )
     //                  ^^^^^^^ parsing link title
     res = state.md.helpers.parseLinkTitle(state.src, pos, state.posMax);
     if (pos < max && start !== pos && res.ok) {
       title = res.str;
-      pos = res.pos;
+      pos   = res.pos;
 
       // [link](  <href>  "title"  )
       //                         ^^ skipping these spaces
       for (; pos < max; pos++) {
         code = state.src.charCodeAt(pos);
-        if (!isSpace(code) && code !== 0x0A) { break; }
+        if (!isSpace(code) && code !== 0x0A) {
+          break;
+        }
       }
     } else {
       title = '';
@@ -5460,13 +5661,16 @@ module.exports = function link(state, silent) {
     //
     // Link reference
     //
-    if (typeof state.env.references === 'undefined') { return false; }
+    if (typeof state.env.references === 'undefined') {
+      return false;
+    }
 
     if (pos < max && state.src.charCodeAt(pos) === 0x5B/* [ */) {
       start = pos + 1;
-      pos = state.md.helpers.parseLinkLabel(state, pos);
+      pos   = state.md.helpers.parseLinkLabel(state, pos);
       if (pos >= 0) {
-        label = state.src.slice(start, pos++);
+        label  = state.src.slice(start, pos++);
+        pbegin = start - 1;
       } else {
         pos = labelEnd + 1;
       }
@@ -5476,14 +5680,17 @@ module.exports = function link(state, silent) {
 
     // covers label === '' and label === undefined
     // (collapsed reference link and shortcut reference link respectively)
-    if (!label) { label = state.src.slice(labelStart, labelEnd); }
+    if (!label) {
+      label   = state.src.slice(labelStart, labelEnd);
+      shorcut = true;
+    }
 
     ref = state.env.references[normalizeReference(label)];
     if (!ref) {
       state.pos = oldPos;
       return false;
     }
-    href = ref.href;
+    href  = ref.href;
     title = ref.title;
   }
 
@@ -5492,22 +5699,25 @@ module.exports = function link(state, silent) {
   // so all that's left to do is to call tokenizer.
   //
   if (!silent) {
-    state.pos = labelStart;
+    state.pos    = labelStart;
     state.posMax = labelEnd;
 
-    token        = state.push('link_open', 'a', 1);
-    token.attrs  = attrs = [ [ 'href', href ] ];
+    token       = state.push('link_open', 'a', 1);
+    token.attrs = attrs = [ [ 'href', href ] ];
     if (title) {
       attrs.push([ 'title', title ]);
     }
     token.markup = '[';
     state.md.inline.tokenize(state);
-    token        = state.push('link_close', 'a', -1);
-    token.markup = ']' + state.src.slice(pbegin, pos).replace(/( |&nbsp;)/g, '\xa0');
 
+    token = state.push('link_close', 'a', -1);
+    if (!shorcut)      {
+      token.markup = ']' + state.src.slice(pbegin, pos).replace(/( |&nbsp;)/g, '\xa0');
+    } else {
+      token.markup = ']';
+    }
   }
-//todo
-  state.pos = pos;
+  state.pos    = pos;
   state.posMax = max;
   return true;
 };
